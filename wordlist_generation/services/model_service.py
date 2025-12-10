@@ -63,25 +63,15 @@ class ModelService:
         if dtype != "auto":
             init_kwargs["torch_dtype"] = dtype
 
-        if s.USE_FUSED_MOE:
-            from wordlist_generation.moe_fused import Qwen3MoeFusedForCausalLM
-            logger.info(
-                f"Loading FUSED MoE model '{s.MODEL_NAME}' (trust_remote_code={s.TRUST_REMOTE_CODE}, "
-                f"device_map='{s.DEVICE_MAP}')"
-            )
-            model = Qwen3MoeFusedForCausalLM.from_pretrained(
-                s.MODEL_NAME,
-                **init_kwargs,
-            )
-        else:
-            logger.info(
-                f"Loading model '{s.MODEL_NAME}' (trust_remote_code={s.TRUST_REMOTE_CODE}, "
-                f"device_map='{s.DEVICE_MAP}')"
-            )
-            model = AutoModelForCausalLM.from_pretrained(
-                s.MODEL_NAME,
-                **init_kwargs,
-            )
+        logger.info(
+            f"Loading model '{s.MODEL_NAME}' (trust_remote_code={s.TRUST_REMOTE_CODE}, "
+            f"device_map='{s.DEVICE_MAP}')"
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(
+            s.MODEL_NAME,
+            **init_kwargs,
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(
             s.MODEL_NAME, trust_remote_code=s.TRUST_REMOTE_CODE, local_files_only=False

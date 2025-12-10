@@ -42,6 +42,3 @@ class Settings:
 
     # In-process GPU generation concurrency (1 = fully serialized)
     GENERATION_MAX_CONCURRENCY: int = int(os.getenv("GENERATION_MAX_CONCURRENCY", "1"))
-
-    # Fused MoE: Use Triton kernels for Qwen3 MoE models
-    USE_FUSED_MOE: bool = os.getenv("USE_FUSED_MOE", "false").lower() == "true"
