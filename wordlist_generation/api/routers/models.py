@@ -10,7 +10,6 @@ class ChatMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     model: str
     messages: List[ChatMessage]
-    custom_id: Optional[str] = None  # Pass-through ID for batch processing
     max_tokens: Optional[int] = None
     vocab_lang: Optional[str] = None
     vocab_n_words: Optional[int] = None
@@ -22,3 +21,7 @@ class ChatCompletionRequest(BaseModel):
     top_p: Optional[float] = 1.0
     top_k: Optional[int] = 50
     repetition_penalty: Optional[float] = 1.0
+
+    # Stochastic beam search: temperature for probabilistic beam pruning
+    # When set, uses stochastic beam selection instead of greedy top-k
+    beam_pruning_temperature: Optional[float] = None

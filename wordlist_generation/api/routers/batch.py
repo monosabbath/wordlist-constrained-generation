@@ -22,6 +22,8 @@ def create_batch_job(
     top_p: float = 1.0,
     top_k: int = 50,
     repetition_penalty: float = 1.0,
+    # Stochastic beam search
+    beam_pruning_temperature: float | None = None,
 ):
     bp = request.app.state.batch_processor
     return bp.enqueue(
@@ -36,6 +38,7 @@ def create_batch_job(
         top_p=top_p,
         top_k=top_k,
         repetition_penalty=repetition_penalty,
+        beam_pruning_temperature=beam_pruning_temperature,
     )
 
 

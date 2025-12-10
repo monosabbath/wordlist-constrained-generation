@@ -85,11 +85,21 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
         top_p=req.top_p,
         top_k=req.top_k,
         repetition_penalty=req.repetition_penalty,
+        beam_pruning_temperature=req.beam_pruning_temperature,
     )
+
+    # Use stochastic beam search if beam_pruning_temperature is set
+    custom_generate = None
+    if req.beam_pruning_temperature is not None:
+        from wordlist_generation.inference.stochastic_beam_search import stochastic_beam_search_generate
+        custom_generate = stochastic_beam_search_generate
 
     with ms.gpu_gate:  # serialize GPU-bound generation
         with torch.inference_mode():
-            outputs = model.generate(**inputs, **gen_kwargs)
+            if custom_generate is not None:
+                outputs = model.generate(**inputs, custom_generate=custom_generate, **gen_kwargs)
+            else:
+                outputs = model.generate(**inputs, **gen_kwargs)
 
     gen_len = int(outputs[0].shape[0] - input_len)
     last_token = int(outputs[0][-1].item())

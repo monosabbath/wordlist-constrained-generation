@@ -73,13 +73,11 @@ class BatchProcessor:
             # 2. Prepare prompts/messages
             logger.info(f"[Job {job_id}] Preparing {len(raw_requests)} prompts...")
             messages_list: List[List[Dict[str, str]]] = []
-            custom_ids: List[str | None] = []
             for i, req_data in enumerate(raw_requests):
                 try:
                     req = ChatCompletionRequest(**req_data)
                     messages = extract_and_reorder_messages(req.messages)
                     messages_list.append(messages)
-                    custom_ids.append(req.custom_id)
                 except ValidationError as e:
                     logger.warning(f"[Job {job_id}] Skipping request {i}: Invalid format. {e}")
                 except Exception as e:
@@ -107,6 +105,14 @@ class BatchProcessor:
                 top_k=int(job_config.get("top_k", 50)),
                 repetition_penalty=float(job_config.get("repetition_penalty", 1.0)),
             )
+
+            # Stochastic beam search setup
+            custom_generate = None
+            beam_pruning_temp = job_config.get("beam_pruning_temperature")
+            if beam_pruning_temp is not None:
+                from wordlist_generation.inference.stochastic_beam_search import stochastic_beam_search_generate
+                custom_generate = stochastic_beam_search_generate
+                generation_kwargs["beam_pruning_temperature"] = float(beam_pruning_temp)
 
             # Constrained vocab prefix
             vocab_lang = job_config.get("vocab_lang")
@@ -145,6 +151,8 @@ class BatchProcessor:
                     return_full_text=False,
                     padding=True,
                     truncation=True,
+                    pad_to_multiple_of=self.settings.PAD_TO_MULTIPLE_OF,
+                    max_length=self.settings.MAX_INPUT_TOKENS,
                     **generation_kwargs,
                 ):
                     # Each output is a list of sequences per prompt (usually 1)
@@ -157,7 +165,6 @@ class BatchProcessor:
             for i, text in enumerate(results):
                 resp = {
                     "id": f"chatcmpl-batch-{job_id}-{i}",
-                    "custom_id": custom_ids[i] if i < len(custom_ids) else None,
                     "object": "chat.completion",
                     "created": created,
                     "model": self.settings.MODEL_NAME,
@@ -207,6 +214,8 @@ class BatchProcessor:
         top_p: float,
         top_k: int,
         repetition_penalty: float,
+        # Stochastic beam search
+        beam_pruning_temperature: float | None = None,
     ):
         # Clean up expired jobs periodically
         self._cleanup_expired_jobs()
@@ -232,6 +241,8 @@ class BatchProcessor:
             "top_p": top_p,
             "top_k": top_k,
             "repetition_penalty": repetition_penalty,
+            # Stochastic beam search
+            "beam_pruning_temperature": beam_pruning_temperature,
         }
 
         self.job_status[job_id] = {

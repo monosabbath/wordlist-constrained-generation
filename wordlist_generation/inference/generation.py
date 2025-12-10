@@ -104,6 +104,8 @@ def getgen_kwargs(
     top_p: Optional[float] = None,
     top_k: Optional[int] = None,
     repetition_penalty: Optional[float] = None,
+    # Stochastic beam search parameter
+    beam_pruning_temperature: Optional[float] = None,
 ):
     # Defaults for sampling params when not provided
     t = float(temperature if temperature is not None else 1.0)
@@ -130,4 +132,6 @@ def getgen_kwargs(
             gen_kwargs["pad_token_id"] = tokenizer.pad_token_id
         else:
             gen_kwargs["pad_token_id"] = stop_ids[0] if isinstance(stop_ids, list) and stop_ids else None
+    if beam_pruning_temperature is not None:
+        gen_kwargs["beam_pruning_temperature"] = float(beam_pruning_temperature)
     return gen_kwargs
