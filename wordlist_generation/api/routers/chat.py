@@ -1,21 +1,20 @@
 import time
 import uuid
 
-import torch
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from wordlist_generation.api.routers.models import ChatCompletionRequest
 from wordlist_generation.api.dependencies import verify_token
-from wordlist_generation.inference.generation import (
-    extract_and_reorder_messages,
-    normalize_max_new_tokens,
-    getgen_kwargs,
-    decode_generated_text,
+from wordlist_generation.inference.runner import (
+    prepare_messages,
+    build_chat_inputs,
+    build_prefix_fn,
+    build_generation_kwargs,
+    generate_sequences,
+    unwrap_generated_sequences,
 )
-from wordlist_generation.inference.vocab_constraints.constraints import (
-    get_stop_ids,
-    build_regexp_prefix_fn,
-)
+from wordlist_generation.inference.vocab_constraints.constraints import get_stop_ids
+from wordlist_generation.inference.generation import decode_generated_text
 
 router = APIRouter(prefix="/v1", tags=["chat"])
 
@@ -42,42 +41,31 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
     tokenizer = ms.tokenizer
     model = ms.model
 
-    # Extract system prompt and rebuild messages (system first)
-    messages = extract_and_reorder_messages(req.messages)
-
-    # Build inputs using v5 apply_chat_template which returns BatchEncoding
-    inputs = tokenizer.apply_chat_template(
-        messages,
-        add_generation_prompt=True,
-        tokenize=True,
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-        max_length=settings.MAX_INPUT_TOKENS,
-    ).to(model.device)
-    
-    input_len = inputs["input_ids"].shape[1]
-
-    # Optional constrained vocab
-    prefix_fn = None
-    if req.vocab_lang and req.vocab_n_words:
-        prefix_fn = build_regexp_prefix_fn(
-            tokenizer=tokenizer,
-            lang=req.vocab_lang,
-            n_words=req.vocab_n_words,
-            wordlist_dir=settings.WORDLIST_DIR,
-        )
-        if prefix_fn is None:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Constrained vocabulary configuration failed for language '{req.vocab_lang}'.",
-            )
-
-    max_new_tokens = normalize_max_new_tokens(req.max_tokens, settings.ALLOWED_MAX_NEW_TOKENS)
-    stop_ids = get_stop_ids(tokenizer)
-    gen_kwargs = getgen_kwargs(
+    messages = prepare_messages(req.messages)
+    inputs, input_len = build_chat_inputs(
         tokenizer=tokenizer,
-        max_new_tokens=max_new_tokens,
+        messages=messages,
+        max_input_tokens=settings.MAX_INPUT_TOKENS,
+        device=model.device,
+    )
+
+    prefix_fn = build_prefix_fn(
+        tokenizer=tokenizer,
+        wordlist_dir=settings.WORDLIST_DIR,
+        vocab_lang=req.vocab_lang,
+        vocab_n_words=req.vocab_n_words,
+    )
+    if (req.vocab_lang and req.vocab_n_words) and prefix_fn is None:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Constrained vocabulary configuration failed for language '{req.vocab_lang}'.",
+        )
+
+    stop_ids = get_stop_ids(tokenizer)
+    gen_kwargs, max_new_tokens = build_generation_kwargs(
+        tokenizer=tokenizer,
+        allowed_max_new_tokens=settings.ALLOWED_MAX_NEW_TOKENS,
+        requested_max_tokens=req.max_tokens,
         stop_ids=stop_ids,
         num_beams=req.num_beams,
         length_penalty=req.length_penalty if req.length_penalty is not None else 1.0,
@@ -93,17 +81,8 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
     # cache_implementation="paged" is removed because it forces continuous batching
     # which doesn't support beam search or prefix_allowed_tokens_fn in v5 yet.
 
-    with ms.gpu_gate:  # serialize GPU-bound generation
-        with torch.inference_mode():
-            outputs = model.generate(**inputs, **gen_kwargs)
-
-    # v5 generate returns different output classes but we can still index or use sequences attribute
-    # If it's a beam search output, sequences might be in outputs.sequences
-    if hasattr(outputs, "sequences"):
-        generated_sequences = outputs.sequences
-    else:
-        generated_sequences = outputs
-
+    outputs = generate_sequences(model_service=ms, inputs=inputs, gen_kwargs=gen_kwargs)
+    generated_sequences = unwrap_generated_sequences(outputs)
     text = decode_generated_text(tokenizer, generated_sequences[0][input_len:], stop_ids=stop_ids)
     
     prompt_tokens = int(input_len)

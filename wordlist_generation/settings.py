@@ -1,9 +1,10 @@
 import os
 import tempfile
 from typing import Tuple
+
 from dotenv import load_dotenv
 
-# Load .env as early as possible
+
 load_dotenv()
 
 
@@ -15,9 +16,6 @@ def _parse_int_tuple(values: str) -> Tuple[int, ...]:
 
 
 class Settings:
-    # Logging
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
-
     # Model/runtime config
     MODEL_NAME: str = os.getenv("MODEL_NAME", "")
     DEVICE_MAP: str = os.getenv("DEVICE_MAP", "auto")
@@ -26,9 +24,7 @@ class Settings:
     TOKENIZER_PADDING_SIDE: str = os.getenv("TOKENIZER_PADDING_SIDE", "left").strip()
     PAD_TO_MULTIPLE_OF: int = int(os.getenv("PAD_TO_MULTIPLE_OF", "64"))
     MAX_INPUT_TOKENS: int = int(os.getenv("MAX_INPUT_TOKENS", "512"))
-    ALLOWED_MAX_NEW_TOKENS: Tuple[int, ...] = _parse_int_tuple(
-        os.getenv("ALLOWED_MAX_NEW_TOKENS", "64,128,256,512")
-    )
+    ALLOWED_MAX_NEW_TOKENS: Tuple[int, ...] = _parse_int_tuple(os.getenv("ALLOWED_MAX_NEW_TOKENS", "64,128,256,512"))
 
     # Constrained vocab
     WORDLIST_DIR: str = os.getenv("WORDLIST_DIR", "wordlists")
