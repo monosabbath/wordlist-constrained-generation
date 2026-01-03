@@ -10,6 +10,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+import wordlist_generation  # Ensure monkey patch is applied
 from lmformatenforcer import RegexParser
 from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
 

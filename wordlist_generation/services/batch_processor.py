@@ -5,14 +5,15 @@ import uuid
 import logging
 from typing import Any, Dict, List
 
+import torch
 from fastapi import BackgroundTasks, HTTPException
 from pydantic import ValidationError
 
 from wordlist_generation.api.routers.models import ChatCompletionRequest
 from wordlist_generation.inference.generation import (
     extract_and_reorder_messages,
-    build_template_kwargs_for_model,
     normalize_max_new_tokens,
+    getgen_kwargs,
 )
 from wordlist_generation.inference.vocab_constraints.constraints import (
     get_stop_ids,
@@ -89,25 +90,9 @@ class BatchProcessor:
             tokenizer = self.model_service.tokenizer
             model = self.model_service.model
             stop_ids = get_stop_ids(tokenizer)
-            if tokenizer.pad_token_id is None:
-                tokenizer.pad_token_id = stop_ids[0] if stop_ids else tokenizer.eos_token_id
-
+            
             max_new_tokens = normalize_max_new_tokens(job_config.get("max_tokens", 512), self.settings.ALLOWED_MAX_NEW_TOKENS)
-            generation_kwargs = dict(
-                max_new_tokens=max_new_tokens,
-                # Enable sampling with beam search
-                do_sample=True,
-                num_beams=job_config.get("num_beams", 10),
-                length_penalty=job_config.get("length_penalty", 1.0),
-                eos_token_id=stop_ids,
-                pad_token_id=tokenizer.pad_token_id,
-                # Sampling params
-                temperature=float(job_config.get("temperature", 1.0)),
-                top_p=float(job_config.get("top_p", 1.0)),
-                top_k=int(job_config.get("top_k", 50)),
-                repetition_penalty=float(job_config.get("repetition_penalty", 1.0)),
-            )
-
+            
             # Constrained vocab prefix
             vocab_lang = job_config.get("vocab_lang")
             vocab_n_words = job_config.get("vocab_n_words")
@@ -120,35 +105,55 @@ class BatchProcessor:
                     n_words=vocab_n_words,
                     wordlist_dir=self.settings.WORDLIST_DIR,
                 )
-                if pf:
-                    generation_kwargs["prefix_allowed_tokens_fn"] = pf
-                    logger.info(f"[Job {job_id}] Successfully added prefix function.")
-                else:
+                if not pf:
                     raise ValueError(f"Constrained vocabulary config failed for lang '{vocab_lang}'.")
 
-            # 4. Run generation (serialized via model_service.gpu_gate)
+            gen_kwargs = getgen_kwargs(
+                tokenizer=tokenizer,
+                max_new_tokens=max_new_tokens,
+                stop_ids=stop_ids,
+                num_beams=job_config.get("num_beams", 10),
+                length_penalty=job_config.get("length_penalty", 1.0),
+                prefix_fn=pf,
+                temperature=job_config.get("temperature"),
+                top_p=job_config.get("top_p"),
+                top_k=job_config.get("top_k"),
+                repetition_penalty=job_config.get("repetition_penalty"),
+            )
+
+            # 4. Run generation
             logger.info(f"[Job {job_id}] Running generation...")
             results: List[str] = []
 
-            # Build prompts from messages
-            tkwargs = build_template_kwargs_for_model(self.settings.MODEL_NAME)
-            prompts: List[str] = []
-            for messages in messages_list:
-                text = tokenizer.apply_chat_template(messages, **tkwargs)
-                prompts.append(text)
-
-            # Use pipeline for batch processing
-            with self.model_service.gpu_gate:
-                for output in self.model_service.text_pipeline(
-                    prompts,
-                    batch_size=self.settings.BATCH_JOB_PIPELINE_SIZE,
-                    return_full_text=False,
+            # Build inputs in batches
+            batch_size = self.settings.BATCH_JOB_PIPELINE_SIZE
+            for i in range(0, len(messages_list), batch_size):
+                batch_messages = messages_list[i:i + batch_size]
+                
+                inputs = tokenizer.apply_chat_template(
+                    batch_messages,
+                    add_generation_prompt=True,
+                    tokenize=True,
+                    return_tensors="pt",
                     padding=True,
                     truncation=True,
-                    **generation_kwargs,
-                ):
-                    # Each output is a list of sequences per prompt (usually 1)
-                    results.append(output[0]["generated_text"])
+                    max_length=self.settings.MAX_INPUT_TOKENS,
+                ).to(model.device)
+                
+                input_len = inputs["input_ids"].shape[1]
+
+                with self.model_service.gpu_gate:
+                    with torch.inference_mode():
+                        outputs = model.generate(**inputs, **gen_kwargs)
+                
+                if hasattr(outputs, "sequences"):
+                    generated_sequences = outputs.sequences
+                else:
+                    generated_sequences = outputs
+
+                for seq in generated_sequences:
+                    text = tokenizer.decode(seq[input_len:], skip_special_tokens=True)
+                    results.append(text)
 
             # 5. Save output file
             logger.info(f"[Job {job_id}] Formatting and saving results...")

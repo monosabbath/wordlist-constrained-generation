@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 logger = logging.getLogger("model-service")
 
@@ -25,12 +25,10 @@ class GPUConcurrencyGate:
 
 
 class ModelService:
-    def __init__(self, model, tokenizer, text_pipeline, settings):
+    def __init__(self, model, tokenizer, settings):
         self.model = model
         self.tokenizer = tokenizer
-        self.text_pipeline = text_pipeline
         self.settings = settings
-        # Serialize GPU work by default (can be >1 if you want limited parallelism)
         self.gpu_gate = GPUConcurrencyGate(max_concurrency=int(getattr(settings, "GENERATION_MAX_CONCURRENCY", 1)))
 
     @classmethod
@@ -59,6 +57,7 @@ class ModelService:
             "low_cpu_mem_usage": True,
             "local_files_only": False,
             "device_map": s.DEVICE_MAP,
+            "attn_implementation": "sdpa",
         }
         if dtype != "auto":
             init_kwargs["torch_dtype"] = dtype
@@ -82,11 +81,4 @@ class ModelService:
 
         model.eval()
 
-        text_pipeline = pipeline(
-            "text-generation",
-            model=model,
-            tokenizer=tokenizer,
-            trust_remote_code=s.TRUST_REMOTE_CODE,
-        )
-
-        return cls(model=model, tokenizer=tokenizer, text_pipeline=text_pipeline, settings=s)
+        return cls(model=model, tokenizer=tokenizer, settings=s)

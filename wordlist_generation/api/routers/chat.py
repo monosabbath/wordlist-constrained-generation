@@ -8,10 +8,6 @@ from wordlist_generation.api.routers.models import ChatCompletionRequest
 from wordlist_generation.api.dependencies import verify_token
 from wordlist_generation.inference.generation import (
     extract_and_reorder_messages,
-    build_template_kwargs_for_model,
-    tokenizer_encode_for_chat,
-    strip_unused_model_inputs,
-    move_inputs_to_correct_device,
     normalize_max_new_tokens,
     getgen_kwargs,
 )
@@ -48,12 +44,17 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
     # Extract system prompt and rebuild messages (system first)
     messages = extract_and_reorder_messages(req.messages)
 
-    # Build inputs
-    template_kwargs = build_template_kwargs_for_model(settings.MODEL_NAME)
-    prompt_text = tokenizer.apply_chat_template(messages, **template_kwargs)
-    inputs = tokenizer_encode_for_chat(tokenizer, prompt_text, settings.PAD_TO_MULTIPLE_OF, settings.MAX_INPUT_TOKENS)
-    inputs = strip_unused_model_inputs(inputs)
-    inputs = move_inputs_to_correct_device(inputs, model)
+    # Build inputs using v5 apply_chat_template which returns BatchEncoding
+    inputs = tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        tokenize=True,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=settings.MAX_INPUT_TOKENS,
+    ).to(model.device)
+    
     input_len = inputs["input_ids"].shape[1]
 
     # Optional constrained vocab
@@ -87,17 +88,30 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
         repetition_penalty=req.repetition_penalty,
     )
 
+    # Ensure we use high-performance SDPA for generation
+    # cache_implementation="paged" is removed because it forces continuous batching
+    # which doesn't support beam search or prefix_allowed_tokens_fn in v5 yet.
+
     with ms.gpu_gate:  # serialize GPU-bound generation
         with torch.inference_mode():
             outputs = model.generate(**inputs, **gen_kwargs)
 
-    gen_len = int(outputs[0].shape[0] - input_len)
-    last_token = int(outputs[0][-1].item())
-    finish_reason = "stop" if stop_ids and (last_token in set(stop_ids)) else ("length" if gen_len >= max_new_tokens else "stop")
-    text = tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True)
-    prompt_tokens = int(inputs["input_ids"].shape[1])
-    completion_tokens = gen_len
+    # v5 generate returns different output classes but we can still index or use sequences attribute
+    # If it's a beam search output, sequences might be in outputs.sequences
+    if hasattr(outputs, "sequences"):
+        generated_sequences = outputs.sequences
+    else:
+        generated_sequences = outputs
+
+    text = tokenizer.decode(generated_sequences[0][input_len:], skip_special_tokens=True)
+    
+    prompt_tokens = int(input_len)
+    completion_tokens = int(generated_sequences[0].shape[0] - input_len)
     created = int(time.time())
+
+    # Determine finish reason
+    last_token = int(generated_sequences[0][-1].item())
+    finish_reason = "stop" if stop_ids and (last_token in set(stop_ids)) else ("length" if completion_tokens >= max_new_tokens else "stop")
 
     resp = {
         "id": f"chatcmpl-{uuid.uuid4()}",
