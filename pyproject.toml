@@ -3,19 +3,19 @@ name = "wordlist-generation"
 version = "0.2.3"
 description = "Vocabulary-constrained generation server (FastAPI + Transformers + lm-format-enforcer)"
 readme = "README.md"
-requires-python = ">=3.11, <3.13"
+requires-python = ">=3.14"
 
 dependencies = [
-    "accelerate>=0.32.0",
+    "accelerate",
     "fastapi",
-    "lm-format-enforcer>=0.11.2",
-    "pydantic>=2",
+    "lm-format-enforcer",
+    "pydantic",
     "python-dotenv",
     "torch",
     "python-multipart",
     "transformers>=5.0.0rc0",
-    "tokenizers>=0.20.1",
-    "uvicorn>=0.30.0",
+    "tokenizers",
+    "uvicorn",
 ]
 
 [dependency-groups]
