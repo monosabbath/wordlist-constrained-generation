@@ -14,6 +14,7 @@ from wordlist_generation.inference.generation import (
     extract_and_reorder_messages,
     normalize_max_new_tokens,
     getgen_kwargs,
+    decode_generated_text,
 )
 from wordlist_generation.inference.vocab_constraints.constraints import (
     get_stop_ids,
@@ -152,7 +153,7 @@ class BatchProcessor:
                     generated_sequences = outputs
 
                 for seq in generated_sequences:
-                    text = tokenizer.decode(seq[input_len:], skip_special_tokens=True)
+                    text = decode_generated_text(tokenizer, seq[input_len:], stop_ids=stop_ids)
                     results.append(text)
 
             # 5. Save output file

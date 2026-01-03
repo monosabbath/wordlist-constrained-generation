@@ -10,6 +10,7 @@ from wordlist_generation.inference.generation import (
     extract_and_reorder_messages,
     normalize_max_new_tokens,
     getgen_kwargs,
+    decode_generated_text,
 )
 from wordlist_generation.inference.vocab_constraints.constraints import (
     get_stop_ids,
@@ -103,7 +104,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
     else:
         generated_sequences = outputs
 
-    text = tokenizer.decode(generated_sequences[0][input_len:], skip_special_tokens=True)
+    text = decode_generated_text(tokenizer, generated_sequences[0][input_len:], stop_ids=stop_ids)
     
     prompt_tokens = int(input_len)
     completion_tokens = int(generated_sequences[0].shape[0] - input_len)

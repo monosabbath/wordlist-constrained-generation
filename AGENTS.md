@@ -1,0 +1,1 @@
+Never read wordlists/es.txt file since it contains 20k lines of words that are irrelevant for working on the codebase.

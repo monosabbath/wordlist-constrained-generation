@@ -1,5 +1,4 @@
 from typing import Any, Dict, List, Optional
-import torch
 
 
 # --- Helper functions for message processing ---
@@ -76,3 +75,64 @@ def getgen_kwargs(
         else:
             gen_kwargs["pad_token_id"] = stop_ids[0] if isinstance(stop_ids, list) and stop_ids else None
     return gen_kwargs
+
+
+def _safe_convert_token_to_id(tokenizer, token: str) -> int | None:
+    try:
+        tid = tokenizer.convert_tokens_to_ids(token)
+        if tid is None:
+            return None
+        tid = int(tid)
+        if tid == -1:
+            return None
+        if getattr(tokenizer, "unk_token_id", None) is not None and tid == int(tokenizer.unk_token_id):
+            return None
+        return tid
+    except Exception:
+        return None
+
+
+def get_newline_like_ids(tokenizer) -> set[int]:
+    """Token IDs that should be treated as whitespace/newlines even if marked 'special' (byte-fallback, etc.)."""
+    ids: set[int] = set()
+    for tok in ("<0x0A>", "<0x0D>", "<0x09>", "\n", "\r", "\t"):
+        tid = _safe_convert_token_to_id(tokenizer, tok)
+        if tid is not None:
+            ids.add(tid)
+    return ids
+
+
+def decode_generated_text(
+    tokenizer,
+    token_ids,
+    *,
+    stop_ids: list[int] | None = None,
+) -> str:
+    """
+    Decode generated token IDs while preserving newline-like tokens that may be (incorrectly) flagged as special.
+    """
+    if token_ids is None:
+        return ""
+
+    if hasattr(token_ids, "tolist"):
+        ids = token_ids.tolist()
+    else:
+        ids = token_ids
+
+    if isinstance(ids, int):
+        ids = [ids]
+
+    preserve_ids = get_newline_like_ids(tokenizer)
+
+    strip_ids: set[int] = set(int(i) for i in (stop_ids or []) if i is not None)
+    for maybe in (getattr(tokenizer, "bos_token_id", None), getattr(tokenizer, "pad_token_id", None)):
+        if maybe is not None:
+            strip_ids.add(int(maybe))
+    eos = getattr(tokenizer, "eos_token_id", None)
+    if isinstance(eos, int):
+        strip_ids.add(int(eos))
+    elif isinstance(eos, list):
+        strip_ids.update(int(i) for i in eos)
+
+    filtered = [int(t) for t in ids if (int(t) in preserve_ids) or (int(t) not in strip_ids)]
+    return tokenizer.decode(filtered, skip_special_tokens=False)
