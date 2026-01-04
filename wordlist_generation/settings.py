@@ -30,7 +30,7 @@ class Settings:
     WORDLIST_DIR: str = os.getenv("WORDLIST_DIR", "wordlists")
 
     # Torch dtype
-    TORCH_DTYPE: str = os.getenv("TORCH_DTYPE", "auto")
+    DTYPE: str = os.getenv("DTYPE", "auto")
 
     # Batch jobs
     BATCH_JOB_TEMP_DIR: str = os.getenv("BATCH_JOB_TEMP_DIR", tempfile.gettempdir())

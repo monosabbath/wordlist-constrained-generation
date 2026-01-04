@@ -35,7 +35,7 @@ class ModelService:
             pass
 
         dtype: Any = "auto"
-        ts = str(s.TORCH_DTYPE).lower()
+        ts = str(s.DTYPE).lower()
         if ts in ("bf16", "bfloat16", "torch.bfloat16"):
             dtype = torch.bfloat16
         elif ts in ("fp16", "float16", "torch.float16"):
@@ -49,7 +49,7 @@ class ModelService:
             "attn_implementation": "sdpa",
         }
         if dtype != "auto":
-            init_kwargs["torch_dtype"] = dtype
+            init_kwargs["dtype"] = dtype
 
         model = AutoModelForCausalLM.from_pretrained(s.MODEL_NAME, **init_kwargs)
 
