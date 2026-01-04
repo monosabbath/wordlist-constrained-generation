@@ -26,10 +26,12 @@ class ChatCompletionRequest(BaseModel):
     # Custom fields for this repo
     vocab_lang: Optional[str] = None
     vocab_n_words: Optional[int] = None
+    vocab_constraint_mode: Optional[str] = None  # "hard" | "soft" (default: Settings.VOCAB_CONSTRAINT_MODE)
+    vocab_soft_penalty: Optional[float] = None  # only used when mode == "soft"
     num_beams: Optional[int] = 1
     length_penalty: Optional[float] = 1.0
     repetition_penalty: Optional[float] = 1.0
-    top_k: Optional[int] = 50
+    top_k: Optional[int] = 500
     
     # Batch processing helper
     custom_id: Optional[str] = None

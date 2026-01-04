@@ -17,6 +17,8 @@ def create_batch_job(
     length_penalty: float = 1.0,
     vocab_lang: str | None = None,
     vocab_n_words: int | None = None,
+    vocab_constraint_mode: str | None = None,
+    vocab_soft_penalty: float | None = None,
     # Sampling parameters
     temperature: float = 1.0,
     top_p: float = 1.0,
@@ -32,6 +34,8 @@ def create_batch_job(
         length_penalty=length_penalty,
         vocab_lang=vocab_lang,
         vocab_n_words=vocab_n_words,
+        vocab_constraint_mode=vocab_constraint_mode,
+        vocab_soft_penalty=vocab_soft_penalty,
         temperature=temperature,
         top_p=top_p,
         top_k=top_k,

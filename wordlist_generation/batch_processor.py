@@ -12,6 +12,7 @@ from wordlist_generation.inference.runner import (
     prepare_messages,
     build_chat_inputs,
     build_prefix_fn,
+    build_vocab_soft_constraint_logits_processor,
     build_generation_kwargs,
     unwrap_generated_sequences,
     decode_sequences,
@@ -79,6 +80,23 @@ class BatchProcessor:
             if (job_config.get("vocab_lang") and job_config.get("vocab_n_words")) and not prefix_fn:
                 raise ValueError(f"Constrained vocabulary config failed for lang '{job_config.get('vocab_lang')}'.")
 
+            mode = str(job_config.get("vocab_constraint_mode") or self.settings.VOCAB_CONSTRAINT_MODE or "hard").strip().lower()
+            if mode not in ("hard", "soft"):
+                raise ValueError("vocab_constraint_mode must be 'hard' or 'soft'.")
+
+            vocab_logits_processor = None
+            prefix_for_generate = prefix_fn
+            if (job_config.get("vocab_lang") and job_config.get("vocab_n_words")) and mode == "soft":
+                vocab_logits_processor = build_vocab_soft_constraint_logits_processor(
+                    prefix_fn=prefix_fn,
+                    penalty=(
+                        job_config.get("vocab_soft_penalty")
+                        if job_config.get("vocab_soft_penalty") is not None
+                        else self.settings.VOCAB_SOFT_PENALTY
+                    ),
+                )
+                prefix_for_generate = None
+
             gen_kwargs, _max_new_tokens = build_generation_kwargs(
                 tokenizer=tokenizer,
                 allowed_max_new_tokens=self.settings.ALLOWED_MAX_NEW_TOKENS,
@@ -86,7 +104,8 @@ class BatchProcessor:
                 stop_ids=stop_ids,
                 num_beams=job_config.get("num_beams", 10),
                 length_penalty=job_config.get("length_penalty", 1.0),
-                prefix_fn=prefix_fn,
+                prefix_fn=prefix_for_generate,
+                logits_processor=vocab_logits_processor,
                 temperature=job_config.get("temperature"),
                 top_p=job_config.get("top_p"),
                 top_k=job_config.get("top_k"),
@@ -160,6 +179,8 @@ class BatchProcessor:
         length_penalty: float,
         vocab_lang: str | None,
         vocab_n_words: int | None,
+        vocab_constraint_mode: str | None,
+        vocab_soft_penalty: float | None,
         temperature: float,
         top_p: float,
         top_k: int,
@@ -183,6 +204,8 @@ class BatchProcessor:
             "length_penalty": length_penalty,
             "vocab_lang": vocab_lang,
             "vocab_n_words": vocab_n_words,
+            "vocab_constraint_mode": vocab_constraint_mode,
+            "vocab_soft_penalty": vocab_soft_penalty,
             "temperature": temperature,
             "top_p": top_p,
             "top_k": top_k,

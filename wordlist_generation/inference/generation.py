@@ -45,6 +45,7 @@ def getgen_kwargs(
     num_beams: Optional[int] = None,
     length_penalty: float = 1.0,
     prefix_fn=None,
+    logits_processor=None,
     # Sampling parameters
     temperature: Optional[float] = None,
     top_p: Optional[float] = None,
@@ -53,7 +54,7 @@ def getgen_kwargs(
 ):
     t = float(temperature if temperature is not None else 1.0)
     tp = float(top_p if top_p is not None else 1.0)
-    tk = int(top_k if top_k is not None else 50)
+    tk = int(top_k if top_k is not None else 500)
     rp = float(repetition_penalty if repetition_penalty is not None else 1.0)
 
     gen_kwargs = dict(
@@ -68,6 +69,8 @@ def getgen_kwargs(
     )
     if prefix_fn:
         gen_kwargs["prefix_allowed_tokens_fn"] = prefix_fn
+    if logits_processor is not None:
+        gen_kwargs["logits_processor"] = logits_processor
     if stop_ids:
         gen_kwargs["eos_token_id"] = stop_ids
         if tokenizer.pad_token_id is not None:

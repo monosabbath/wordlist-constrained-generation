@@ -13,6 +13,9 @@ from wordlist_generation.inference.generation import (
 from wordlist_generation.inference.vocab_constraints.constraints import (
     build_regexp_prefix_fn,
 )
+from wordlist_generation.inference.vocab_constraints.logits_processor import (
+    SoftPrefixConstraintLogitsProcessor,
+)
 
 
 def build_chat_inputs(
@@ -71,6 +74,7 @@ def build_generation_kwargs(
     num_beams: Optional[int],
     length_penalty: Optional[float],
     prefix_fn,
+    logits_processor,
     temperature: Optional[float],
     top_p: Optional[float],
     top_k: Optional[int],
@@ -84,12 +88,24 @@ def build_generation_kwargs(
         num_beams=num_beams,
         length_penalty=length_penalty if length_penalty is not None else 1.0,
         prefix_fn=prefix_fn,
+        logits_processor=logits_processor,
         temperature=temperature,
         top_p=top_p,
         top_k=top_k,
         repetition_penalty=repetition_penalty,
     )
     return gen_kwargs, max_new_tokens
+
+
+def build_vocab_soft_constraint_logits_processor(*, prefix_fn, penalty: float | None):
+    if prefix_fn is None:
+        return None
+    if penalty is None:
+        return None
+    p = float(penalty)
+    if p <= 0:
+        return None
+    return [SoftPrefixConstraintLogitsProcessor(prefix_allowed_tokens_fn=prefix_fn, penalty=p)]
 
 
 def decode_sequences(

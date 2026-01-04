@@ -1,1 +1,1 @@
-Never read wordlists/es.txt file since it contains 20k lines of words that are irrelevant for working on the codebase.
+Never read wordlists/es.txt file since it contains 20k lines of words that are irrelevant for working on the codebase. You can still use the wordlist in test scripts but just do not read it yourself or include it in your context.

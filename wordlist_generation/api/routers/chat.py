@@ -9,6 +9,7 @@ from wordlist_generation.inference.runner import (
     prepare_messages,
     build_chat_inputs,
     build_prefix_fn,
+    build_vocab_soft_constraint_logits_processor,
     build_generation_kwargs,
     generate_sequences,
     unwrap_generated_sequences,
@@ -61,6 +62,19 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
             detail=f"Constrained vocabulary configuration failed for language '{req.vocab_lang}'.",
         )
 
+    mode = (req.vocab_constraint_mode or settings.VOCAB_CONSTRAINT_MODE or "hard").strip().lower()
+    if mode not in ("hard", "soft"):
+        raise HTTPException(status_code=400, detail="vocab_constraint_mode must be 'hard' or 'soft'.")
+
+    vocab_logits_processor = None
+    prefix_for_generate = prefix_fn
+    if (req.vocab_lang and req.vocab_n_words) and mode == "soft":
+        vocab_logits_processor = build_vocab_soft_constraint_logits_processor(
+            prefix_fn=prefix_fn,
+            penalty=req.vocab_soft_penalty if req.vocab_soft_penalty is not None else settings.VOCAB_SOFT_PENALTY,
+        )
+        prefix_for_generate = None
+
     stop_ids = get_stop_ids(tokenizer)
     gen_kwargs, max_new_tokens = build_generation_kwargs(
         tokenizer=tokenizer,
@@ -69,7 +83,8 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
         stop_ids=stop_ids,
         num_beams=req.num_beams,
         length_penalty=req.length_penalty if req.length_penalty is not None else 1.0,
-        prefix_fn=prefix_fn,
+        prefix_fn=prefix_for_generate,
+        logits_processor=vocab_logits_processor,
         # Sampling params
         temperature=req.temperature,
         top_p=req.top_p,

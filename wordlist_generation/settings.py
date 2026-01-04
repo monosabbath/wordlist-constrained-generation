@@ -28,6 +28,8 @@ class Settings:
 
     # Constrained vocab
     WORDLIST_DIR: str = os.getenv("WORDLIST_DIR", "wordlists")
+    VOCAB_CONSTRAINT_MODE: str = os.getenv("VOCAB_CONSTRAINT_MODE", "hard").strip().lower()
+    VOCAB_SOFT_PENALTY: float = float(os.getenv("VOCAB_SOFT_PENALTY", "8.0"))
 
     # Torch dtype
     DTYPE: str = os.getenv("DTYPE", "auto")
