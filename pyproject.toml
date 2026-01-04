@@ -1,7 +1,7 @@
 [project]
 name = "wordlist-generation"
 version = "0.2.3"
-description = "Vocabulary-constrained generation server (FastAPI + Transformers + lm-format-enforcer)"
+description = "Wordlist-constrained generation server (FastAPI + Transformers + lm-format-enforcer)"
 readme = "README.md"
 requires-python = ">=3.14"
 
@@ -25,3 +25,13 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["wordlist_generation*"]
+
+# --- UV GPU CONFIGURATION ---
+# This ensures PyTorch is pulled from the NVIDIA-optimized servers
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cuda" }
