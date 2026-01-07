@@ -13,7 +13,7 @@ from transformers.generation.logits_process import TopKLogitsWarper, TopPLogitsW
 from wordlist_generation.model_service import ModelService
 from wordlist_generation.settings import Settings
 from wordlist_generation.inference.vocab_constraints.constraints import build_regexp_prefix_fn
-from wordlist_generation.inference.vocab_constraints.logits_processor import SoftPrefixConstraintLogitsProcessor
+from wordlist_generation.inference.vocab_constraints.logits_processor import TieredSoftPrefixConstraintLogitsProcessor
 
 
 @dataclass
@@ -96,7 +96,12 @@ def diagnose_one_step(
 
     out: list[StepDiagnostics] = []
     for p in penalties:
-        proc = SoftPrefixConstraintLogitsProcessor(prefix_allowed_tokens_fn=prefix_fn, penalty=float(p))
+        proc = TieredSoftPrefixConstraintLogitsProcessor(
+            prefix_allowed_tokens_fn_n=prefix_fn,
+            prefix_allowed_tokens_fn_kn=prefix_fn,
+            penalty_m=0.0,
+            penalty_n=float(p),
+        )
         scores = proc(input_ids, raw.clone()).squeeze(0)
 
         # Simulate warpers as generate() would for sampling.
@@ -172,7 +177,14 @@ def diagnose_one_step_beam_sampling(
     for p in penalties:
         lp = log_probs.clone()
         custom = LogitsProcessorList(
-            [SoftPrefixConstraintLogitsProcessor(prefix_allowed_tokens_fn=prefix_fn, penalty=float(p))]
+            [
+                TieredSoftPrefixConstraintLogitsProcessor(
+                    prefix_allowed_tokens_fn_n=prefix_fn,
+                    prefix_allowed_tokens_fn_kn=prefix_fn,
+                    penalty_m=0.0,
+                    penalty_n=float(p),
+                )
+            ]
         )
         proc = model._get_logits_processor(
             generation_config=base_cfg,

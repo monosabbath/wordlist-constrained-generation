@@ -14,7 +14,7 @@ from wordlist_generation.inference.vocab_constraints.constraints import (
     build_regexp_prefix_fn,
 )
 from wordlist_generation.inference.vocab_constraints.logits_processor import (
-    SoftPrefixConstraintLogitsProcessor,
+    TieredSoftPrefixConstraintLogitsProcessor,
 )
 
 
@@ -97,15 +97,29 @@ def build_generation_kwargs(
     return gen_kwargs, max_new_tokens
 
 
-def build_vocab_soft_constraint_logits_processor(*, prefix_fn, penalty: float | None):
-    if prefix_fn is None:
+def build_vocab_tiered_soft_constraint_logits_processor(
+    *,
+    prefix_fn_n,
+    prefix_fn_kn,
+    penalty_m: float | None,
+    penalty_n: float | None,
+):
+    if prefix_fn_n is None or prefix_fn_kn is None:
         return None
-    if penalty is None:
+    if penalty_m is None or penalty_n is None:
         return None
-    p = float(penalty)
-    if p <= 0:
+    m = float(penalty_m)
+    n = float(penalty_n)
+    if m < 0 or n <= 0 or n < m:
         return None
-    return [SoftPrefixConstraintLogitsProcessor(prefix_allowed_tokens_fn=prefix_fn, penalty=p)]
+    return [
+        TieredSoftPrefixConstraintLogitsProcessor(
+            prefix_allowed_tokens_fn_n=prefix_fn_n,
+            prefix_allowed_tokens_fn_kn=prefix_fn_kn,
+            penalty_m=m,
+            penalty_n=n,
+        )
+    ]
 
 
 def decode_sequences(

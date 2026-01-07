@@ -27,7 +27,13 @@ class ChatCompletionRequest(BaseModel):
     vocab_lang: Optional[str] = None
     vocab_n_words: Optional[int] = None
     vocab_constraint_mode: Optional[str] = None  # "hard" | "soft" (default: Settings.VOCAB_CONSTRAINT_MODE)
-    vocab_soft_penalty: Optional[float] = None  # only used when mode == "soft"
+    # Rank-aware (tiered) soft penalties for vocab constraints (only used when mode == "soft"):
+    # ranks <= N: no penalty
+    # N < ranks <= k*N: penalty (tier2)
+    # ranks > k*N: penalty (tier3)
+    vocab_soft_tier2_max_rank_multiplier: Optional[float] = None
+    vocab_soft_tier2_penalty: Optional[float] = None
+    vocab_soft_tier3_penalty: Optional[float] = None
     num_beams: Optional[int] = 1
     length_penalty: Optional[float] = 1.0
     repetition_penalty: Optional[float] = 1.0

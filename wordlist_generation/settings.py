@@ -29,7 +29,9 @@ class Settings:
     # Constrained vocab
     WORDLIST_DIR: str = os.getenv("WORDLIST_DIR", "wordlists")
     VOCAB_CONSTRAINT_MODE: str = os.getenv("VOCAB_CONSTRAINT_MODE", "hard").strip().lower()
-    VOCAB_SOFT_PENALTY: float = float(os.getenv("VOCAB_SOFT_PENALTY", "8.0"))
+    VOCAB_SOFT_TIER2_MAX_RANK_MULTIPLIER: float = float(os.getenv("VOCAB_SOFT_TIER2_MAX_RANK_MULTIPLIER", "1.0"))
+    VOCAB_SOFT_TIER2_PENALTY: float = float(os.getenv("VOCAB_SOFT_TIER2_PENALTY", "0.0"))
+    VOCAB_SOFT_TIER3_PENALTY: float = float(os.getenv("VOCAB_SOFT_TIER3_PENALTY", "8.0"))
 
     # Torch dtype
     DTYPE: str = os.getenv("DTYPE", "auto")

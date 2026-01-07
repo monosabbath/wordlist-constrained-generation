@@ -2,6 +2,7 @@ import json
 import os
 import time
 import uuid
+import math
 from typing import Any, Dict, List
 
 from fastapi import BackgroundTasks, HTTPException
@@ -12,7 +13,7 @@ from wordlist_generation.inference.runner import (
     prepare_messages,
     build_chat_inputs,
     build_prefix_fn,
-    build_vocab_soft_constraint_logits_processor,
+    build_vocab_tiered_soft_constraint_logits_processor,
     build_generation_kwargs,
     unwrap_generated_sequences,
     decode_sequences,
@@ -71,13 +72,13 @@ class BatchProcessor:
             model = self.model_service.model
             stop_ids = get_stop_ids(tokenizer)
 
-            prefix_fn = build_prefix_fn(
+            prefix_fn_n = build_prefix_fn(
                 tokenizer=tokenizer,
                 wordlist_dir=self.settings.WORDLIST_DIR,
                 vocab_lang=job_config.get("vocab_lang"),
                 vocab_n_words=job_config.get("vocab_n_words"),
             )
-            if (job_config.get("vocab_lang") and job_config.get("vocab_n_words")) and not prefix_fn:
+            if (job_config.get("vocab_lang") and job_config.get("vocab_n_words")) and not prefix_fn_n:
                 raise ValueError(f"Constrained vocabulary config failed for lang '{job_config.get('vocab_lang')}'.")
 
             mode = str(job_config.get("vocab_constraint_mode") or self.settings.VOCAB_CONSTRAINT_MODE or "hard").strip().lower()
@@ -85,15 +86,47 @@ class BatchProcessor:
                 raise ValueError("vocab_constraint_mode must be 'hard' or 'soft'.")
 
             vocab_logits_processor = None
-            prefix_for_generate = prefix_fn
+            prefix_for_generate = prefix_fn_n
             if (job_config.get("vocab_lang") and job_config.get("vocab_n_words")) and mode == "soft":
-                vocab_logits_processor = build_vocab_soft_constraint_logits_processor(
-                    prefix_fn=prefix_fn,
-                    penalty=(
-                        job_config.get("vocab_soft_penalty")
-                        if job_config.get("vocab_soft_penalty") is not None
-                        else self.settings.VOCAB_SOFT_PENALTY
-                    ),
+                k = (
+                    job_config.get("vocab_soft_tier2_max_rank_multiplier")
+                    if job_config.get("vocab_soft_tier2_max_rank_multiplier") is not None
+                    else self.settings.VOCAB_SOFT_TIER2_MAX_RANK_MULTIPLIER
+                )
+                m = (
+                    job_config.get("vocab_soft_tier2_penalty")
+                    if job_config.get("vocab_soft_tier2_penalty") is not None
+                    else self.settings.VOCAB_SOFT_TIER2_PENALTY
+                )
+                n = (
+                    job_config.get("vocab_soft_tier3_penalty")
+                    if job_config.get("vocab_soft_tier3_penalty") is not None
+                    else self.settings.VOCAB_SOFT_TIER3_PENALTY
+                )
+                if float(k) < 1:
+                    raise ValueError("vocab_soft_tier2_max_rank_multiplier must be >= 1.")
+                if float(m) < 0 or float(n) <= 0 or float(n) < float(m):
+                    raise ValueError(
+                        "Require 0 <= vocab_soft_tier2_penalty <= vocab_soft_tier3_penalty, and vocab_soft_tier3_penalty > 0."
+                    )
+
+                n_words = int(job_config.get("vocab_n_words") or 0)
+                kn_words = max(n_words, int(math.ceil(float(k) * n_words)))
+                prefix_fn_kn = build_prefix_fn(
+                    tokenizer=tokenizer,
+                    wordlist_dir=self.settings.WORDLIST_DIR,
+                    vocab_lang=job_config.get("vocab_lang"),
+                    vocab_n_words=kn_words,
+                )
+                if not prefix_fn_kn:
+                    raise ValueError(
+                        f"Constrained vocabulary config failed for lang '{job_config.get('vocab_lang')}' at kN={kn_words}."
+                    )
+                vocab_logits_processor = build_vocab_tiered_soft_constraint_logits_processor(
+                    prefix_fn_n=prefix_fn_n,
+                    prefix_fn_kn=prefix_fn_kn,
+                    penalty_m=float(m),
+                    penalty_n=float(n),
                 )
                 prefix_for_generate = None
 
@@ -180,7 +213,9 @@ class BatchProcessor:
         vocab_lang: str | None,
         vocab_n_words: int | None,
         vocab_constraint_mode: str | None,
-        vocab_soft_penalty: float | None,
+        vocab_soft_tier2_max_rank_multiplier: float | None,
+        vocab_soft_tier2_penalty: float | None,
+        vocab_soft_tier3_penalty: float | None,
         temperature: float,
         top_p: float,
         top_k: int,
@@ -205,7 +240,9 @@ class BatchProcessor:
             "vocab_lang": vocab_lang,
             "vocab_n_words": vocab_n_words,
             "vocab_constraint_mode": vocab_constraint_mode,
-            "vocab_soft_penalty": vocab_soft_penalty,
+            "vocab_soft_tier2_max_rank_multiplier": vocab_soft_tier2_max_rank_multiplier,
+            "vocab_soft_tier2_penalty": vocab_soft_tier2_penalty,
+            "vocab_soft_tier3_penalty": vocab_soft_tier3_penalty,
             "temperature": temperature,
             "top_p": top_p,
             "top_k": top_k,
