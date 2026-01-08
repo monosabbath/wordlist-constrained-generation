@@ -1,1 +1,1 @@
-Never read wordlists/es.txt file since it contains 20k lines of words that are irrelevant for working on the codebase. You can still use the wordlist in test scripts but just do not read it yourself or include it in your context.
+If you need to read dataset files including wordlists/es.txt and sentences/arh - 2016-11 - Spain - 2023-12-20.tsv to understand their structure, it is sufficient to read only the first 10 lines.
