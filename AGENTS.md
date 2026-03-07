@@ -1,1 +1,0 @@
-If you need to read dataset files including wordlists/es.txt and sentences/arh - 2016-11 - Spain - 2023-12-20.tsv to understand their structure, it is sufficient to read only the first 10 lines.
