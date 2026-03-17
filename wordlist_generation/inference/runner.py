@@ -24,6 +24,7 @@ def build_chat_inputs(
     messages: List[Any] | List[List[Dict[str, str]]],
     max_input_tokens: int,
     device,
+    enable_thinking: bool = False,
 ) -> Tuple[Any, int]:
     inputs = tokenizer.apply_chat_template(
         messages,
@@ -33,6 +34,7 @@ def build_chat_inputs(
         padding=True,
         truncation=True,
         max_length=max_input_tokens,
+        chat_template_kwargs={"enable_thinking": enable_thinking},
     ).to(device)
     input_len = int(inputs["input_ids"].shape[1])
     return inputs, input_len

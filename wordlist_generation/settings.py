@@ -33,6 +33,9 @@ class Settings:
     VOCAB_SOFT_TIER2_PENALTY: float = float(os.getenv("VOCAB_SOFT_TIER2_PENALTY", "0.0"))
     VOCAB_SOFT_TIER3_PENALTY: float = float(os.getenv("VOCAB_SOFT_TIER3_PENALTY", "8.0"))
 
+    # Chat template
+    ENABLE_THINKING: bool = os.getenv("ENABLE_THINKING", "false").lower() == "true"
+
     # Torch dtype
     DTYPE: str = os.getenv("DTYPE", "auto")
 

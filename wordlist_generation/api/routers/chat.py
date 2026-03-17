@@ -50,6 +50,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
         messages=messages,
         max_input_tokens=settings.MAX_INPUT_TOKENS,
         device=model.device,
+        enable_thinking=settings.ENABLE_THINKING,
     )
 
     prefix_fn_n = build_prefix_fn(

@@ -155,6 +155,7 @@ class BatchProcessor:
                     messages=batch_messages,
                     max_input_tokens=self.settings.MAX_INPUT_TOKENS,
                     device=model.device,
+                    enable_thinking=self.settings.ENABLE_THINKING,
                 )
 
                 outputs = generate_sequences(model_service=self.model_service, inputs=inputs, gen_kwargs=gen_kwargs)
