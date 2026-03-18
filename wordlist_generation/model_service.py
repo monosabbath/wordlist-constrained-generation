@@ -1,7 +1,7 @@
 from typing import Any, Dict
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoModelForImageTextToText, AutoTokenizer
 
 
 class GPUConcurrencyGate:
@@ -51,7 +51,10 @@ class ModelService:
         if dtype != "auto":
             init_kwargs["dtype"] = dtype
 
-        model = AutoModelForCausalLM.from_pretrained(s.MODEL_NAME, **init_kwargs)
+        try:
+            model = AutoModelForCausalLM.from_pretrained(s.MODEL_NAME, **init_kwargs)
+        except (ValueError, AttributeError):
+            model = AutoModelForImageTextToText.from_pretrained(s.MODEL_NAME, **init_kwargs)
 
         tokenizer = AutoTokenizer.from_pretrained(s.MODEL_NAME, trust_remote_code=s.TRUST_REMOTE_CODE, local_files_only=False)
         tokenizer.padding_side = s.TOKENIZER_PADDING_SIDE
