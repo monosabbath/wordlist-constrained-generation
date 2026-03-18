@@ -1,83 +1,122 @@
-# Wordlist‑Constrained Generation (Transformers v5)
+# Wordlist-Constrained Generation
 
-FastAPI server for wordlist‑constrained text generation using Hugging Face **Transformers v5** + **lm‑format‑enforcer**.
+FastAPI server for vocabulary-constrained text generation using HuggingFace Transformers v5 + lm-format-enforcer. Designed to run on remote GPU instances as the generation backend for the language-app pipeline.
 
-## Run
+## Quick Start
 
 ```bash
-uv run uvicorn wordlist_generation.main:app --host 0.0.0.0 --port 8010 --workers 1
+# Install dependencies
+uv sync
+
+# Configure
+cat > .env << 'EOF'
+MODEL_NAME=Qwen/Qwen3.5-27B
+HF_TOKEN=your_token_here
+BATCH_JOB_PIPELINE_SIZE=16
+EOF
+
+# Run
+uv run uvicorn wordlist_generation.main:app --host 0.0.0.0 --port 8010
 ```
 
-## Chat API
+## Deployment on vast.ai
 
-`POST /v1/chat/completions` (OpenAI‑compatible)
+1. Create an instance using the **NVIDIA CUDA** template with port **8010** exposed
+2. Add your SSH public key to vast.ai
+3. SSH in and run the setup:
 
 ```bash
-curl -H "Authorization: Bearer $SECRET_TOKEN" \
+curl -LsSf https://astral.sh/uv/install.sh | sh && source $HOME/.local/bin/env
+git clone https://github.com/monosabbath/wordlist-constrained-generation
+cd wordlist-constrained-generation
+# Create .env as above
+uv sync
+uv run uvicorn wordlist_generation.main:app --host 0.0.0.0 --port 8010
+```
+
+4. Point the generation-pipeline at the server by setting `GENERATION_SERVER_URL` in its `.env`
+
+## API
+
+### Chat Completions
+
+`POST /v1/chat/completions` (OpenAI-compatible)
+
+```bash
+curl -H "Authorization: Bearer changeme" \
   -H "Content-Type: application/json" \
   -d '{
-    "messages": [
-      {"role": "user", "content": "Write 3 lines, each on a new line."}
-    ],
-    "max_tokens": 128
+    "messages": [{"role": "user", "content": "Escribe una oración simple."}],
+    "max_tokens": 128,
+    "vocab_lang": "es",
+    "vocab_n_words": 500,
+    "num_beams": 5
   }' \
-  http://127.0.0.1:8010/v1/chat/completions
+  http://localhost:8010/v1/chat/completions
 ```
 
-Optional constrained vocab:
+### Batch API
 
-```json
-{"vocab_lang":"es","vocab_n_words":3000}
-```
-
-## Batch API
-
-1) Upload a JSON file containing a list of chat completion requests:
+**Submit** — upload a JSON file (array of chat completion requests) with generation params as query parameters:
 
 ```bash
-curl -X POST "http://127.0.0.1:8010/v1/batch/jobs?max_tokens=128&num_beams=4" \
-  -H "Authorization: Bearer $SECRET_TOKEN" \
-  -F "file=@/path/to/my_requests.json"
+curl -X POST "http://localhost:8010/v1/batch/jobs?token=changeme&max_tokens=250&num_beams=5&vocab_lang=es&vocab_n_words=500&vocab_constraint_mode=hard" \
+  -F "file=@batch.json"
 ```
 
-2) Poll status:
-
+**Poll status:**
 ```bash
-curl -H "Authorization: Bearer $SECRET_TOKEN" \
-  http://127.0.0.1:8010/v1/batch/jobs/<job_id>
+curl "http://localhost:8010/v1/batch/jobs/<job_id>?token=changeme"
 ```
 
-3) Download results:
-
+**Download results:**
 ```bash
-curl -L -H "Authorization: Bearer $SECRET_TOKEN" \
-  -o results.json \
-  http://127.0.0.1:8010/v1/batch/jobs/<job_id>/results
+curl -o results.json "http://localhost:8010/v1/batch/jobs/<job_id>/results?token=changeme"
 ```
 
-The file is an array of OpenAI‑shaped chat completion objects (token counts are `null` in batch):
+## Vocabulary Constraint Modes
 
-```json
-[
-  {
-    "id": "chatcmpl-batch-<job_id>-0",
-    "object": "chat.completion",
-    "created": 1730000123,
-    "model": "google/gemma-3-27b-it",
-    "choices": [
-      {
-        "index": 0,
-        "message": { "role": "assistant", "content": "..." },
-        "finish_reason": "stop"
-      }
-    ],
-    "usage": { "prompt_tokens": null, "completion_tokens": null, "total_tokens": null }
-  },
-  { "... second item ..." }
-]
+- **hard** — lm-format-enforcer blocks all tokens outside the allowed wordlist. Guarantees output stays within vocabulary.
+- **soft** — tiered penalty logits processor. Penalizes out-of-vocabulary tokens but doesn't block them entirely. Allows more natural output at the cost of occasional out-of-vocab words.
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `MODEL_NAME` | *(required)* | HuggingFace model ID (e.g., `Qwen/Qwen3.5-27B`) |
+| `HF_TOKEN` | | HuggingFace token for gated/faster downloads |
+| `BATCH_JOB_PIPELINE_SIZE` | `8` | Prompts per GPU forward pass |
+| `VOCAB_CONSTRAINT_MODE` | `hard` | Default: `hard` or `soft` |
+| `ENABLE_THINKING` | `false` | Enable model reasoning/thinking tokens |
+| `SECRET_TOKEN` | `changeme` | API authentication token |
+| `DEVICE_MAP` | `auto` | PyTorch device mapping |
+| `DTYPE` | `auto` | Model dtype (`auto`, `bf16`, `fp16`) |
+| `ALLOWED_MAX_NEW_TOKENS` | `64,128,256,512` | Allowed max token buckets |
+| `MAX_INPUT_TOKENS` | `512` | Max input token length |
+
+## GPU Memory (96GB VRAM with 27B model)
+
+| Batch Size | Beams | Peak VRAM | Status |
+|---|---|---|---|
+| 8 | 5 | ~67 GB | Safe |
+| 16 | 5 | ~80 GB | Recommended |
+| 20+ | 5 | ~90+ GB | Risk of OOM |
+
+## Project Structure
+
 ```
-
-Implementation details:
-- Uploaded files are stored in `BATCH_JOB_TEMP_DIR` (defaults to OS temp) and removed after processing.
-- The output file remains available for download after completion (path is tracked in memory).
-- `BATCH_JOB_PIPELINE_SIZE` controls how many prompts the pipeline feeds per forward pass.
+wordlist_generation/
+  main.py              # FastAPI app
+  settings.py          # Environment config
+  model_service.py     # Model loading (CausalLM + multimodal fallback)
+  batch_processor.py   # Batch job processing
+  api/routers/
+    chat.py            # /v1/chat/completions
+    batch.py           # /v1/batch/jobs
+  inference/
+    runner.py          # Generation orchestration
+    generation.py      # Token decoding, gen kwargs
+    vocab_constraints/ # Wordlist constraint logic
+wordlists/             # Frequency-ranked word lists by language
+third_party/           # Vendored group beam search
+```
