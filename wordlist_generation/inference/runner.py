@@ -34,7 +34,7 @@ def build_chat_inputs(
         padding=True,
         truncation=True,
         max_length=max_input_tokens,
-        chat_template_kwargs={"enable_thinking": enable_thinking},
+        enable_thinking=enable_thinking,
     ).to(device)
     input_len = int(inputs["input_ids"].shape[1])
     return inputs, input_len
