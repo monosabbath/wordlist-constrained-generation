@@ -14,6 +14,7 @@ from wordlist_generation.inference.vocab_constraints.constraints import (
     build_regexp_prefix_fn,
 )
 from wordlist_generation.inference.vocab_constraints.logits_processor import (
+    PresencePenaltyLogitsProcessor,
     TieredSoftPrefixConstraintLogitsProcessor,
 )
 
@@ -122,6 +123,16 @@ def build_vocab_tiered_soft_constraint_logits_processor(
             penalty_n=n,
         )
     ]
+
+
+def build_presence_penalty_processor(
+    *,
+    presence_penalty: float | None,
+    prompt_len: int,
+) -> PresencePenaltyLogitsProcessor | None:
+    if presence_penalty is None or presence_penalty == 0.0:
+        return None
+    return PresencePenaltyLogitsProcessor(penalty=presence_penalty, prompt_len=prompt_len)
 
 
 def decode_sequences(

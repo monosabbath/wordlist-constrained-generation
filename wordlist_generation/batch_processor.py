@@ -13,6 +13,7 @@ from wordlist_generation.inference.runner import (
     prepare_messages,
     build_chat_inputs,
     build_prefix_fn,
+    build_presence_penalty_processor,
     build_vocab_tiered_soft_constraint_logits_processor,
     build_generation_kwargs,
     unwrap_generated_sequences,
@@ -130,20 +131,7 @@ class BatchProcessor:
                 )
                 prefix_for_generate = None
 
-            gen_kwargs, _max_new_tokens = build_generation_kwargs(
-                tokenizer=tokenizer,
-                allowed_max_new_tokens=self.settings.ALLOWED_MAX_NEW_TOKENS,
-                requested_max_tokens=job_config.get("max_tokens", 512),
-                stop_ids=stop_ids,
-                num_beams=job_config.get("num_beams", 10),
-                length_penalty=job_config.get("length_penalty", 1.0),
-                prefix_fn=prefix_for_generate,
-                logits_processor=vocab_logits_processor,
-                temperature=job_config.get("temperature"),
-                top_p=job_config.get("top_p"),
-                top_k=job_config.get("top_k"),
-                repetition_penalty=job_config.get("repetition_penalty"),
-            )
+            presence_penalty_val = job_config.get("presence_penalty")
 
             results: List[str] = []
             batch_size = self.settings.BATCH_JOB_PIPELINE_SIZE
@@ -156,6 +144,30 @@ class BatchProcessor:
                     max_input_tokens=self.settings.MAX_INPUT_TOKENS,
                     device=model.device,
                     enable_thinking=self.settings.ENABLE_THINKING,
+                )
+
+                # Build per-batch logits processors (presence penalty needs prompt_len)
+                batch_processors = list(vocab_logits_processor) if vocab_logits_processor else []
+                pp = build_presence_penalty_processor(
+                    presence_penalty=presence_penalty_val,
+                    prompt_len=input_len,
+                )
+                if pp is not None:
+                    batch_processors.append(pp)
+
+                gen_kwargs, _max_new_tokens = build_generation_kwargs(
+                    tokenizer=tokenizer,
+                    allowed_max_new_tokens=self.settings.ALLOWED_MAX_NEW_TOKENS,
+                    requested_max_tokens=job_config.get("max_tokens", 512),
+                    stop_ids=stop_ids,
+                    num_beams=job_config.get("num_beams", 10),
+                    length_penalty=job_config.get("length_penalty", 1.0),
+                    prefix_fn=prefix_for_generate,
+                    logits_processor=batch_processors or None,
+                    temperature=job_config.get("temperature"),
+                    top_p=job_config.get("top_p"),
+                    top_k=job_config.get("top_k"),
+                    repetition_penalty=job_config.get("repetition_penalty"),
                 )
 
                 outputs = generate_sequences(model_service=self.model_service, inputs=inputs, gen_kwargs=gen_kwargs)
@@ -217,6 +229,7 @@ class BatchProcessor:
         vocab_soft_tier2_max_rank_multiplier: float | None,
         vocab_soft_tier2_penalty: float | None,
         vocab_soft_tier3_penalty: float | None,
+        presence_penalty: float,
         temperature: float,
         top_p: float,
         top_k: int,
@@ -244,6 +257,7 @@ class BatchProcessor:
             "vocab_soft_tier2_max_rank_multiplier": vocab_soft_tier2_max_rank_multiplier,
             "vocab_soft_tier2_penalty": vocab_soft_tier2_penalty,
             "vocab_soft_tier3_penalty": vocab_soft_tier3_penalty,
+            "presence_penalty": presence_penalty,
             "temperature": temperature,
             "top_p": top_p,
             "top_k": top_k,

@@ -22,6 +22,7 @@ def create_batch_job(
     vocab_soft_tier2_penalty: float | None = None,
     vocab_soft_tier3_penalty: float | None = None,
     # Sampling parameters
+    presence_penalty: float = 0.0,
     temperature: float = 1.0,
     top_p: float = 1.0,
     top_k: int = 50,
@@ -40,6 +41,7 @@ def create_batch_job(
         vocab_soft_tier2_max_rank_multiplier=vocab_soft_tier2_max_rank_multiplier,
         vocab_soft_tier2_penalty=vocab_soft_tier2_penalty,
         vocab_soft_tier3_penalty=vocab_soft_tier3_penalty,
+        presence_penalty=presence_penalty,
         temperature=temperature,
         top_p=top_p,
         top_k=top_k,

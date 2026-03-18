@@ -59,3 +59,30 @@ class TieredSoftPrefixConstraintLogitsProcessor(LogitsProcessor):
                 scores[batch_id, idx0] = scores[batch_id, idx0] + self.penalty_m
 
         return scores
+
+
+class PresencePenaltyLogitsProcessor(LogitsProcessor):
+    """OpenAI-style presence penalty.
+
+    Subtracts a flat penalty from the logits of any token that has
+    already appeared in the generated sequence.  Unlike HuggingFace's
+    ``repetition_penalty`` (which is multiplicative), this is additive
+    and uniform across all previously-seen tokens.
+    """
+
+    def __init__(self, penalty: float, prompt_len: int):
+        self.penalty = float(penalty)
+        self.prompt_len = int(prompt_len)
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if self.penalty == 0.0:
+            return scores
+
+        for batch_id in range(scores.shape[0]):
+            generated = input_ids[batch_id, self.prompt_len:]
+            if generated.numel() == 0:
+                continue
+            unique_tokens = generated.unique()
+            scores[batch_id, unique_tokens] -= self.penalty
+
+        return scores

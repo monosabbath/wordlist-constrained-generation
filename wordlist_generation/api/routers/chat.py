@@ -11,6 +11,7 @@ from wordlist_generation.inference.runner import (
     prepare_messages,
     build_chat_inputs,
     build_prefix_fn,
+    build_presence_penalty_processor,
     build_vocab_tiered_soft_constraint_logits_processor,
     build_generation_kwargs,
     generate_sequences,
@@ -109,6 +110,16 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
         prefix_for_generate = None
 
     stop_ids = get_stop_ids(tokenizer)
+
+    # Build combined logits processor list
+    logits_processors = list(vocab_logits_processor) if vocab_logits_processor else []
+    pp = build_presence_penalty_processor(
+        presence_penalty=req.presence_penalty,
+        prompt_len=input_len,
+    )
+    if pp is not None:
+        logits_processors.append(pp)
+
     gen_kwargs, max_new_tokens = build_generation_kwargs(
         tokenizer=tokenizer,
         allowed_max_new_tokens=settings.ALLOWED_MAX_NEW_TOKENS,
@@ -117,7 +128,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
         num_beams=req.num_beams,
         length_penalty=req.length_penalty if req.length_penalty is not None else 1.0,
         prefix_fn=prefix_for_generate,
-        logits_processor=vocab_logits_processor,
+        logits_processor=logits_processors or None,
         # Sampling params
         temperature=req.temperature,
         top_p=req.top_p,
