@@ -57,23 +57,6 @@ def get_stop_ids(tokenizer) -> List[int]:
     return list(stop_ids)
 
 
-def _get_newline_like_ids(tokenizer) -> set[int]:
-    ids: set[int] = set()
-    for tok in ("<0x0A>", "<0x0D>", "<0x09>", "\n", "\r", "\t"):
-        try:
-            tid = tokenizer.convert_tokens_to_ids(tok)
-            if tid is None:
-                continue
-            tid = int(tid)
-            if tid == -1:
-                continue
-            if getattr(tokenizer, "unk_token_id", None) is not None and tid == int(tokenizer.unk_token_id):
-                continue
-            ids.add(tid)
-        except Exception:
-            continue
-    return ids
-
 
 # --- Trie and Regex Caches ---
 
@@ -167,11 +150,15 @@ def build_regexp_prefix_fn(
     base_prefix_fn = build_transformers_prefix_allowed_tokens_fn(tokenizer, parser)
 
     stop_ids = set(get_stop_ids(tokenizer))
-    newline_ids = _get_newline_like_ids(tokenizer)
 
     def wrapped_prefix_fn(batch_id, input_ids):
         allowed = set(base_prefix_fn(batch_id, input_ids))
-        return list(allowed | stop_ids | newline_ids)
+        # Only allow stopping when the regex is at an accepting state
+        # (i.e. after a complete word + punctuation), ensuring all stop
+        # token variants are available at those points.
+        if stop_ids & allowed:
+            allowed |= stop_ids
+        return list(allowed)
 
     _PREFIX_FN_CACHE[key] = wrapped_prefix_fn
     return wrapped_prefix_fn
