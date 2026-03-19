@@ -170,7 +170,23 @@ class BatchProcessor:
                     repetition_penalty=job_config.get("repetition_penalty"),
                 )
 
-                outputs = generate_sequences(model_service=self.model_service, inputs=inputs, gen_kwargs=gen_kwargs)
+                constraint_config = {
+                    "vocab_lang": job_config.get("vocab_lang"),
+                    "vocab_n_words": job_config.get("vocab_n_words"),
+                    "vocab_constraint_mode": mode,
+                    "vocab_soft_tier2_max_rank_multiplier": float(k) if mode == "soft" else None,
+                    "vocab_soft_tier2_penalty": float(m) if mode == "soft" else None,
+                    "vocab_soft_tier3_penalty": float(n) if mode == "soft" else None,
+                    "presence_penalty": presence_penalty_val,
+                    "prompt_len": input_len,
+                }
+
+                outputs = generate_sequences(
+                    model_service=self.model_service,
+                    inputs=inputs,
+                    gen_kwargs=gen_kwargs,
+                    constraint_config=constraint_config,
+                )
                 generated_sequences = unwrap_generated_sequences(outputs)
                 results.extend(
                     decode_sequences(

@@ -72,6 +72,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
 
     vocab_logits_processor = None
     prefix_for_generate = prefix_fn_n
+    k = m = n = None
     if (req.vocab_lang and req.vocab_n_words) and mode == "soft":
         k = (
             req.vocab_soft_tier2_max_rank_multiplier
@@ -136,11 +137,18 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
         repetition_penalty=req.repetition_penalty,
     )
 
-    # Ensure we use high-performance SDPA for generation
-    # cache_implementation="paged" is removed because it forces continuous batching
-    # which doesn't support beam search or prefix_allowed_tokens_fn in v5 yet.
+    constraint_config = {
+        "vocab_lang": req.vocab_lang,
+        "vocab_n_words": req.vocab_n_words,
+        "vocab_constraint_mode": mode,
+        "vocab_soft_tier2_max_rank_multiplier": float(k) if k is not None else None,
+        "vocab_soft_tier2_penalty": float(m) if m is not None else None,
+        "vocab_soft_tier3_penalty": float(n) if n is not None else None,
+        "presence_penalty": req.presence_penalty,
+        "prompt_len": input_len,
+    }
 
-    outputs = generate_sequences(model_service=ms, inputs=inputs, gen_kwargs=gen_kwargs)
+    outputs = generate_sequences(model_service=ms, inputs=inputs, gen_kwargs=gen_kwargs, constraint_config=constraint_config)
     generated_sequences = unwrap_generated_sequences(outputs)
     text = decode_generated_text(tokenizer, generated_sequences[0][input_len:], stop_ids=stop_ids)
     

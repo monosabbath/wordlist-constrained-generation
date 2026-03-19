@@ -45,3 +45,7 @@ class Settings:
 
     # In-process GPU generation concurrency (1 = fully serialized)
     GENERATION_MAX_CONCURRENCY: int = int(os.getenv("GENERATION_MAX_CONCURRENCY", "1"))
+
+    # Expert parallelism (MoE multi-GPU)
+    EXPERT_PARALLEL: bool = os.getenv("EXPERT_PARALLEL", "false").lower() == "true"
+    EXPERTS_IMPLEMENTATION: str = os.getenv("EXPERTS_IMPLEMENTATION", "eager")

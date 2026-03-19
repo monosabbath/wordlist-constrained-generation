@@ -41,10 +41,43 @@ def build_chat_inputs(
     return inputs, input_len
 
 
-def generate_sequences(*, model_service, inputs, gen_kwargs) -> Any:
+def generate_sequences(*, model_service, inputs, gen_kwargs, constraint_config=None) -> Any:
+    coordinator = getattr(model_service, "coordinator", None)
+    if coordinator and coordinator.is_distributed:
+        return _generate_distributed(
+            coordinator=coordinator,
+            model_service=model_service,
+            inputs=inputs,
+            gen_kwargs=gen_kwargs,
+            constraint_config=constraint_config,
+        )
     with model_service.gpu_gate:
         with torch.inference_mode():
             return model_service.model.generate(**inputs, **gen_kwargs)
+
+
+def _generate_distributed(*, coordinator, model_service, inputs, gen_kwargs, constraint_config):
+    """Rank 0 broadcasts inputs + config, all ranks generate in lockstep."""
+    # Separate serializable kwargs from callables
+    serializable_kwargs = {
+        k: v
+        for k, v in gen_kwargs.items()
+        if k not in ("prefix_allowed_tokens_fn", "logits_processor")
+    }
+
+    task = {
+        "input_ids": inputs["input_ids"],
+        "attention_mask": inputs["attention_mask"],
+        "gen_kwargs": serializable_kwargs,
+        "constraint_config": constraint_config,
+    }
+
+    # Broadcast to workers (they build their own callables and generate)
+    coordinator.broadcast_task(task)
+
+    # Rank 0 generates with the original gen_kwargs (including callables)
+    with torch.inference_mode():
+        return model_service.model.generate(**inputs, **gen_kwargs)
 
 
 def unwrap_generated_sequences(outputs) -> Any:
