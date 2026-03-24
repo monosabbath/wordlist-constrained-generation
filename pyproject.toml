@@ -17,6 +17,7 @@ dependencies = [
     "tokenizers",
     "uvicorn",
     "hqq",
+    "optimum-quanto",
 ]
 
 [dependency-groups]

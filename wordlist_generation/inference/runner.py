@@ -47,12 +47,14 @@ def generate_sequences(*, model_service, inputs, gen_kwargs) -> Any:
     kv_quant = Settings.KV_CACHE_QUANTIZATION
     if kv_quant and kv_quant != "none":
         nbits = int(kv_quant.replace("int", ""))
+        backend = Settings.KV_CACHE_BACKEND
+        axis = 1 if backend == "hqq" else 0
         gen_kwargs["cache_implementation"] = "quantized"
         gen_kwargs["cache_config"] = {
-            "backend": "hqq",
+            "backend": backend,
             "nbits": nbits,
-            "axis_key": 1,
-            "axis_value": 1,
+            "axis_key": axis,
+            "axis_value": axis,
         }
 
     with model_service.gpu_gate:

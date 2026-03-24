@@ -43,8 +43,10 @@ class Settings:
     BATCH_JOB_TEMP_DIR: str = os.getenv("BATCH_JOB_TEMP_DIR", tempfile.gettempdir())
     BATCH_JOB_PIPELINE_SIZE: int = int(os.getenv("BATCH_JOB_PIPELINE_SIZE", "8"))
 
-    # KV cache quantization: "none", "int4", "int8"
+    # KV cache quantization: "none", "int2", "int4", "int8"
     KV_CACHE_QUANTIZATION: str = os.getenv("KV_CACHE_QUANTIZATION", "none").strip().lower()
+    # KV cache quantization backend: "hqq" or "quanto"
+    KV_CACHE_BACKEND: str = os.getenv("KV_CACHE_BACKEND", "quanto").strip().lower()
 
     # In-process GPU generation concurrency (1 = fully serialized)
     GENERATION_MAX_CONCURRENCY: int = int(os.getenv("GENERATION_MAX_CONCURRENCY", "1"))
