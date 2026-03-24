@@ -16,6 +16,7 @@ dependencies = [
     "transformers>=5.0.0rc0",
     "tokenizers",
     "uvicorn",
+    "hqq",
 ]
 
 [dependency-groups]

@@ -42,6 +42,19 @@ def build_chat_inputs(
 
 
 def generate_sequences(*, model_service, inputs, gen_kwargs) -> Any:
+    from wordlist_generation.settings import Settings
+
+    kv_quant = Settings.KV_CACHE_QUANTIZATION
+    if kv_quant and kv_quant != "none":
+        nbits = int(kv_quant.replace("int", ""))
+        gen_kwargs["cache_implementation"] = "quantized"
+        gen_kwargs["cache_config"] = {
+            "backend": "hqq",
+            "nbits": nbits,
+            "axis_key": 1,
+            "axis_value": 1,
+        }
+
     with model_service.gpu_gate:
         with torch.inference_mode():
             return model_service.model.generate(**inputs, **gen_kwargs)
