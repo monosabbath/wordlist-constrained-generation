@@ -8,12 +8,13 @@ def normalize_word(w: str) -> str:
 
 
 class TrieNode:
-    __slots__ = ("children", "end", "min_rank")
+    __slots__ = ("children", "end", "min_rank", "end_rank")
 
     def __init__(self):
         self.children: Dict[str, "TrieNode"] = {}
         self.end: bool = False
         self.min_rank: int = 10**12
+        self.end_rank: int = 10**12
 
 
 def build_trie_with_ranks(words: List[str]) -> TrieNode:
@@ -27,6 +28,7 @@ def build_trie_with_ranks(words: List[str]) -> TrieNode:
             node = node.children[ch]
             node.min_rank = min(node.min_rank, rank)
         node.end = True
+        node.end_rank = min(node.end_rank, rank)
     return root
 
 
@@ -39,7 +41,7 @@ def trie_to_regex(node: TrieNode, nlimit: int) -> str:
         sub = trie_to_regex(child, nlimit)
         grouped.setdefault(sub, []).append(ch)
 
-    has_end = node.end and node.min_rank <= nlimit
+    has_end = node.end and node.end_rank <= nlimit
 
     # Special-case: pure terminal set (all children have empty suffix)
     if grouped and set(grouped.keys()) == {""}:
