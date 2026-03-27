@@ -1,8 +1,6 @@
 import time
 import uuid
 
-import math
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from wordlist_generation.api.routers.models import ChatCompletionRequest
@@ -12,7 +10,7 @@ from wordlist_generation.inference.runner import (
     build_chat_inputs,
     build_prefix_fn,
     build_presence_penalty_processor,
-    build_vocab_tiered_soft_constraint_logits_processor,
+    build_soft_constraint_setup,
     build_generation_kwargs,
     generate_sequences,
     unwrap_generated_sequences,
@@ -66,48 +64,20 @@ def chat_completions(req: ChatCompletionRequest, request: Request, auth_ok: bool
             detail=f"Constrained vocabulary configuration failed for language '{req.vocab_lang}'.",
         )
 
-    mode = (req.vocab_constraint_mode or settings.VOCAB_CONSTRAINT_MODE or "hard").strip().lower()
-    if mode not in ("hard", "soft"):
-        raise HTTPException(status_code=400, detail="vocab_constraint_mode must be 'hard' or 'soft'.")
-
-    vocab_logits_processor = None
-    prefix_for_generate = prefix_fn_n
-    if (req.vocab_lang and req.vocab_n_words) and mode == "soft":
-        k = (
-            req.vocab_soft_tier2_max_rank_multiplier
-            if req.vocab_soft_tier2_max_rank_multiplier is not None
-            else settings.VOCAB_SOFT_TIER2_MAX_RANK_MULTIPLIER
-        )
-        m = req.vocab_soft_tier2_penalty if req.vocab_soft_tier2_penalty is not None else settings.VOCAB_SOFT_TIER2_PENALTY
-        n = req.vocab_soft_tier3_penalty if req.vocab_soft_tier3_penalty is not None else settings.VOCAB_SOFT_TIER3_PENALTY
-
-        if float(k) < 1:
-            raise HTTPException(status_code=400, detail="vocab_soft_tier2_max_rank_multiplier must be >= 1.")
-        if float(m) < 0 or float(n) <= 0 or float(n) < float(m):
-            raise HTTPException(status_code=400, detail="Require 0 <= vocab_soft_tier2_penalty <= vocab_soft_tier3_penalty, and vocab_soft_tier3_penalty > 0.")
-
-        n_words = int(req.vocab_n_words or 0)
-        kn_words = max(n_words, int(math.ceil(float(k) * n_words)))
-
-        prefix_fn_kn = build_prefix_fn(
+    try:
+        prefix_for_generate, vocab_logits_processor = build_soft_constraint_setup(
             tokenizer=tokenizer,
-            wordlist_dir=settings.WORDLIST_DIR,
+            settings=settings,
             vocab_lang=req.vocab_lang,
-            vocab_n_words=kn_words,
-        )
-        if prefix_fn_kn is None:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Constrained vocabulary configuration failed for language '{req.vocab_lang}' at kN={kn_words}.",
-            )
-
-        vocab_logits_processor = build_vocab_tiered_soft_constraint_logits_processor(
+            vocab_n_words=req.vocab_n_words,
             prefix_fn_n=prefix_fn_n,
-            prefix_fn_kn=prefix_fn_kn,
-            penalty_m=float(m),
-            penalty_n=float(n),
+            vocab_constraint_mode=req.vocab_constraint_mode,
+            vocab_soft_tier2_max_rank_multiplier=req.vocab_soft_tier2_max_rank_multiplier,
+            vocab_soft_tier2_penalty=req.vocab_soft_tier2_penalty,
+            vocab_soft_tier3_penalty=req.vocab_soft_tier3_penalty,
         )
-        prefix_for_generate = None
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     stop_ids = get_stop_ids(tokenizer)
 

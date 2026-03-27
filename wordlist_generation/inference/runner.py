@@ -125,6 +125,81 @@ def build_vocab_tiered_soft_constraint_logits_processor(
     ]
 
 
+def build_soft_constraint_setup(
+    *,
+    tokenizer,
+    settings,
+    vocab_lang: str | None,
+    vocab_n_words: int | None,
+    prefix_fn_n,
+    vocab_constraint_mode: str | None,
+    vocab_soft_tier2_max_rank_multiplier: float | None,
+    vocab_soft_tier2_penalty: float | None,
+    vocab_soft_tier3_penalty: float | None,
+) -> Tuple[Any, Any]:
+    """Resolve constraint mode and build soft-constraint logits processor if needed.
+
+    Returns (prefix_for_generate, vocab_logits_processor).
+    - hard mode: returns (prefix_fn_n, None)
+    - soft mode: returns (None, [TieredSoftPrefixConstraintLogitsProcessor])
+
+    Raises ValueError on invalid parameters.
+    """
+    import math
+
+    mode = str(vocab_constraint_mode or settings.VOCAB_CONSTRAINT_MODE or "hard").strip().lower()
+    if mode not in ("hard", "soft"):
+        raise ValueError("vocab_constraint_mode must be 'hard' or 'soft'.")
+
+    vocab_logits_processor = None
+    prefix_for_generate = prefix_fn_n
+
+    if (vocab_lang and vocab_n_words) and mode == "soft":
+        k = (
+            vocab_soft_tier2_max_rank_multiplier
+            if vocab_soft_tier2_max_rank_multiplier is not None
+            else settings.VOCAB_SOFT_TIER2_MAX_RANK_MULTIPLIER
+        )
+        m = (
+            vocab_soft_tier2_penalty
+            if vocab_soft_tier2_penalty is not None
+            else settings.VOCAB_SOFT_TIER2_PENALTY
+        )
+        n = (
+            vocab_soft_tier3_penalty
+            if vocab_soft_tier3_penalty is not None
+            else settings.VOCAB_SOFT_TIER3_PENALTY
+        )
+        if float(k) < 1:
+            raise ValueError("vocab_soft_tier2_max_rank_multiplier must be >= 1.")
+        if float(m) < 0 or float(n) <= 0 or float(n) < float(m):
+            raise ValueError(
+                "Require 0 <= vocab_soft_tier2_penalty <= vocab_soft_tier3_penalty, and vocab_soft_tier3_penalty > 0."
+            )
+
+        n_words = int(vocab_n_words or 0)
+        kn_words = max(n_words, int(math.ceil(float(k) * n_words)))
+        prefix_fn_kn = build_prefix_fn(
+            tokenizer=tokenizer,
+            wordlist_dir=settings.WORDLIST_DIR,
+            vocab_lang=vocab_lang,
+            vocab_n_words=kn_words,
+        )
+        if not prefix_fn_kn:
+            raise ValueError(
+                f"Constrained vocabulary config failed for lang '{vocab_lang}' at kN={kn_words}."
+            )
+        vocab_logits_processor = build_vocab_tiered_soft_constraint_logits_processor(
+            prefix_fn_n=prefix_fn_n,
+            prefix_fn_kn=prefix_fn_kn,
+            penalty_m=float(m),
+            penalty_n=float(n),
+        )
+        prefix_for_generate = None
+
+    return prefix_for_generate, vocab_logits_processor
+
+
 def build_presence_penalty_processor(
     *,
     presence_penalty: float | None,

@@ -2,7 +2,6 @@ import json
 import os
 import time
 import uuid
-import math
 from typing import Any, Dict, List
 
 from fastapi import BackgroundTasks, HTTPException
@@ -14,7 +13,7 @@ from wordlist_generation.inference.runner import (
     build_chat_inputs,
     build_prefix_fn,
     build_presence_penalty_processor,
-    build_vocab_tiered_soft_constraint_logits_processor,
+    build_soft_constraint_setup,
     build_generation_kwargs,
     unwrap_generated_sequences,
     decode_sequences,
@@ -82,54 +81,17 @@ class BatchProcessor:
             if (job_config.get("vocab_lang") and job_config.get("vocab_n_words")) and not prefix_fn_n:
                 raise ValueError(f"Constrained vocabulary config failed for lang '{job_config.get('vocab_lang')}'.")
 
-            mode = str(job_config.get("vocab_constraint_mode") or self.settings.VOCAB_CONSTRAINT_MODE or "hard").strip().lower()
-            if mode not in ("hard", "soft"):
-                raise ValueError("vocab_constraint_mode must be 'hard' or 'soft'.")
-
-            vocab_logits_processor = None
-            prefix_for_generate = prefix_fn_n
-            if (job_config.get("vocab_lang") and job_config.get("vocab_n_words")) and mode == "soft":
-                k = (
-                    job_config.get("vocab_soft_tier2_max_rank_multiplier")
-                    if job_config.get("vocab_soft_tier2_max_rank_multiplier") is not None
-                    else self.settings.VOCAB_SOFT_TIER2_MAX_RANK_MULTIPLIER
-                )
-                m = (
-                    job_config.get("vocab_soft_tier2_penalty")
-                    if job_config.get("vocab_soft_tier2_penalty") is not None
-                    else self.settings.VOCAB_SOFT_TIER2_PENALTY
-                )
-                n = (
-                    job_config.get("vocab_soft_tier3_penalty")
-                    if job_config.get("vocab_soft_tier3_penalty") is not None
-                    else self.settings.VOCAB_SOFT_TIER3_PENALTY
-                )
-                if float(k) < 1:
-                    raise ValueError("vocab_soft_tier2_max_rank_multiplier must be >= 1.")
-                if float(m) < 0 or float(n) <= 0 or float(n) < float(m):
-                    raise ValueError(
-                        "Require 0 <= vocab_soft_tier2_penalty <= vocab_soft_tier3_penalty, and vocab_soft_tier3_penalty > 0."
-                    )
-
-                n_words = int(job_config.get("vocab_n_words") or 0)
-                kn_words = max(n_words, int(math.ceil(float(k) * n_words)))
-                prefix_fn_kn = build_prefix_fn(
-                    tokenizer=tokenizer,
-                    wordlist_dir=self.settings.WORDLIST_DIR,
-                    vocab_lang=job_config.get("vocab_lang"),
-                    vocab_n_words=kn_words,
-                )
-                if not prefix_fn_kn:
-                    raise ValueError(
-                        f"Constrained vocabulary config failed for lang '{job_config.get('vocab_lang')}' at kN={kn_words}."
-                    )
-                vocab_logits_processor = build_vocab_tiered_soft_constraint_logits_processor(
-                    prefix_fn_n=prefix_fn_n,
-                    prefix_fn_kn=prefix_fn_kn,
-                    penalty_m=float(m),
-                    penalty_n=float(n),
-                )
-                prefix_for_generate = None
+            prefix_for_generate, vocab_logits_processor = build_soft_constraint_setup(
+                tokenizer=tokenizer,
+                settings=self.settings,
+                vocab_lang=job_config.get("vocab_lang"),
+                vocab_n_words=job_config.get("vocab_n_words"),
+                prefix_fn_n=prefix_fn_n,
+                vocab_constraint_mode=job_config.get("vocab_constraint_mode"),
+                vocab_soft_tier2_max_rank_multiplier=job_config.get("vocab_soft_tier2_max_rank_multiplier"),
+                vocab_soft_tier2_penalty=job_config.get("vocab_soft_tier2_penalty"),
+                vocab_soft_tier3_penalty=job_config.get("vocab_soft_tier3_penalty"),
+            )
 
             presence_penalty_val = job_config.get("presence_penalty")
 

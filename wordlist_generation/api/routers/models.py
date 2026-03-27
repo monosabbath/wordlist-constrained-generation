@@ -1,4 +1,4 @@
-from typing import Optional, List, Union
+from typing import Optional, List
 from pydantic import BaseModel
 
 
@@ -10,18 +10,12 @@ class ChatMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     model: Optional[str] = None
     messages: List[ChatMessage]
-    
+
     # OpenAI compatible fields
     max_tokens: Optional[int] = None
     temperature: Optional[float] = 1.0
     top_p: Optional[float] = 1.0
-    n: Optional[int] = 1
-    stream: Optional[bool] = False
-    stop: Optional[Union[str, List[str]]] = None
     presence_penalty: Optional[float] = 0.0
-    frequency_penalty: Optional[float] = 0.0
-    logit_bias: Optional[dict] = None
-    user: Optional[str] = None
 
     # Custom fields for this repo
     vocab_lang: Optional[str] = None
