@@ -49,7 +49,8 @@ def get_stop_ids(tokenizer) -> List[int]:
     # Add common end markers
     common_end_markers = (
         "<end_of_turn>", "<|eot_id|>", "<|im_end|>",
-        "<|END_OF_TURN_TOKEN|>", "<|END_RESPONSE|>"
+        "<|END_OF_TURN_TOKEN|>", "<|END_RESPONSE|>",
+        "<turn|>",  # Gemma 4 end-of-turn
     )
     for special in common_end_markers:
         _safe_add(tokenizer, special, stop_ids)
